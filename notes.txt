@@ -1,0 +1,178 @@
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/examples/jsm/controls/PointerLockControls.js';
+
+// Initialize the scene
+const scene = new THREE.Scene();
+const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+const renderer = new THREE.WebGLRenderer();
+renderer.setSize(window.innerWidth, window.innerHeight);
+document.body.appendChild(renderer.domElement);
+
+// Add lights
+const ambientLight = new THREE.AmbientLight(0x404040);
+scene.add(ambientLight);
+const spotlight = new THREE.SpotLight(0xffffff, 5);
+spotlight.position.set(10, 20, 10);
+spotlight.castShadow = true;
+scene.add(spotlight);
+const directionalLight = new THREE.DirectionalLight(0xffffff, 5);
+directionalLight.position.set(-5, 10, 5).normalize();
+scene.add(directionalLight);
+const pointLight = new THREE.PointLight(0xffffff, 1, 50);
+pointLight.position.set(5, 2, -5);
+scene.add(pointLight);
+
+// Maze layout and wall objects
+const maze = [
+  [1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 1],
+  [1, 0, 1, 0, 1],
+  [1, 0, 0, 0, 1],
+  [1, 1, 1, 1, 1],
+];
+const wallObjects = [];
+const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x808080 });
+
+maze.forEach((row, i) => {
+  row.forEach((cell, j) => {
+    if (cell === 1) {
+      const wallGeometry = new THREE.BoxGeometry(1, 2, 1);
+      const wallMesh = new THREE.Mesh(wallGeometry, wallMaterial);
+      wallMesh.position.set(j, 1, -i);
+      wallMesh.castShadow = true;
+      wallMesh.receiveShadow = true;
+      scene.add(wallMesh);
+      wallObjects.push(wallMesh);
+    }
+  });
+});
+
+// Add floor
+const floorGeometry = new THREE.PlaneGeometry(50, 50); // Adjust size as needed
+const floorMaterial = new THREE.ShadowMaterial({ color: 0xffffff, opacity: 0.5 }); // Or use MeshStandardMaterial
+const floor = new THREE.Mesh(floorGeometry, floorMaterial);
+floor.rotation.x = -Math.PI / 2; // Rotate to make it horizontal
+floor.position.y = 0; // Position it at y = 0
+floor.receiveShadow = true;
+scene.add(floor);
+
+// Renderer settings
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+
+// Camera setup
+camera.position.set(0, 3, 7);
+camera.lookAt(new THREE.Vector3(0, 1, 0));
+
+// Initialize PointerLockControls
+const controls = new PointerLockControls(camera, document.body);
+document.body.addEventListener('click', () => controls.lock());
+
+// Define player as the camera for simplicity
+const player = camera;
+const playerVelocity = new THREE.Vector3();
+const jumpForce = 1; // Adjust jump force if needed
+const gravity = -0.01; // Gravity strength
+const playerHeight = 2; // Height of the player for ground detection
+
+let isJumping = false;
+let isGrounded = false;
+
+// Movement control variables
+let moveForward = false;
+let moveBackward = false;
+let moveLeft = false;
+let moveRight = false;
+
+// Keydown event listeners
+document.addEventListener('keydown', (event) => {
+  switch (event.code) {
+    case 'ArrowUp':
+    case 'KeyW':
+      moveForward = true;
+      break;
+    case 'ArrowDown':
+    case 'KeyS':
+      moveBackward = true;
+      break;
+    case 'ArrowLeft':
+    case 'KeyA':
+      moveLeft = true;
+      break;
+    case 'ArrowRight':
+    case 'KeyD':
+      moveRight = true;
+      break;
+    case 'Space':
+      if (isGrounded) {
+        playerVelocity.y = jumpForce;
+        isJumping = true;
+        isGrounded = false;
+      }
+      break;
+  }
+});
+
+// Keyup event listeners
+document.addEventListener('keyup', (event) => {
+  switch (event.code) {
+    case 'ArrowUp':
+    case 'KeyW':
+      moveForward = false;
+      break;
+    case 'ArrowDown':
+    case 'KeyS':
+      moveBackward = false;
+      break;
+    case 'ArrowLeft':
+    case 'KeyA':
+      moveLeft = false;
+      break;
+    case 'ArrowRight':
+    case 'KeyD':
+      moveRight = false;
+      break;
+  }
+});
+
+// Handle window resizing
+window.addEventListener('resize', () => {
+  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// Check if the player is grounded by casting a ray downwards
+function checkIfGrounded() {
+  const raycaster = new THREE.Raycaster(player.position, new THREE.Vector3(0, -1, 0), 0, playerHeight / 2);
+  const intersects = raycaster.intersectObject(floor);
+  return intersects.length > 0;
+}
+
+// Jumping and movement logic in animation loop
+function animate() {
+  requestAnimationFrame(animate);
+
+  // Movement controls
+  if (moveForward) controls.moveForward(0.08);
+  if (moveBackward) controls.moveForward(-0.08);
+  if (moveLeft) controls.moveRight(-0.08);
+  if (moveRight) controls.moveRight(0.08);
+
+  // Apply gravity
+  playerVelocity.y += gravity;
+  player.position.y += playerVelocity.y;
+
+  // Check if grounded
+  isGrounded = checkIfGrounded();
+  if (isGrounded && player.position.y < 1) {
+    player.position.y = 1; // Ensure player is on the ground
+    playerVelocity.y = 0;
+    isJumping = false; // Reset jumping state
+  }
+
+  // Render the scene
+  renderer.render(scene, camera);
+}
+
+animate();
